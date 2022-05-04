@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "": { "model": "redstone_bus:block/redstone_bus" }
+  }
+}

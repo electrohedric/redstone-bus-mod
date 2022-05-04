@@ -1,29 +1,29 @@
 {
   "schemaVersion": 1,
-  "id": "modid",
+  "id": "redstone_bus",
   "version": "${version}",
 
-  "name": "Example Mod",
-  "description": "This is an example description! Tell everyone what your mod is about!",
+  "name": "Redstone Buses",
+  "description": "Add redstone buses (instant redstone wire)",
   "authors": [
-    "Me!"
+    "Electrohedric"
   ],
   "contact": {
     "homepage": "https://fabricmc.net/",
-    "sources": "https://github.com/FabricMC/fabric-example-mod"
+    "sources": "<insert github>"
   },
 
   "license": "CC0-1.0",
-  "icon": "assets/modid/icon.png",
+  "icon": "assets/redstone_bus/icon.png",
 
   "environment": "*",
   "entrypoints": {
     "main": [
-      "net.fabricmc.example.ExampleMod"
+      "me.electrohedric.RedstoneBusMod"
     ]
   },
   "mixins": [
-    "modid.mixins.json"
+    "redstone_bus.mixins.json"
   ],
 
   "depends": {
