@@ -1,8 +1,8 @@
 {
   "ambientocclusion": false,
   "textures": {
-    "particle": "redstone_bus:block/redstone_bus",
-    "line": "redstone_bus:block/redstone_bus"
+    "particle": "redstone_bus:block/redstone_bus_off",
+    "line": "redstone_bus:block/redstone_bus_off"
   },
   "elements": [
     {

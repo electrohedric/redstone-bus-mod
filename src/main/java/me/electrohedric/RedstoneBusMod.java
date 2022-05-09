@@ -22,6 +22,6 @@ public class RedstoneBusMod implements ModInitializer {
     public void onInitialize() {
         Registry.register(Registry.BLOCK, new Identifier(MODID, "redstone_bus"), REDSTONE_BUS);
         Registry.register(Registry.ITEM, new Identifier(MODID, "redstone_bus"),
-                new BlockItem(REDSTONE_BUS, new FabricItemSettings().group(ItemGroup.MISC)));
+                new BlockItem(REDSTONE_BUS, new FabricItemSettings().group(ItemGroup.REDSTONE)));
     }
 }
