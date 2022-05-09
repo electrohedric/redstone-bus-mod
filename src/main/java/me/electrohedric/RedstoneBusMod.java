@@ -16,7 +16,7 @@ public class RedstoneBusMod implements ModInitializer {
     
     public static final Logger LOGGER = LoggerFactory.getLogger(MODID);
     
-    public static final RedstoneBusBlock REDSTONE_BUS = new RedstoneBusBlock(FabricBlockSettings.of(Material.DECORATION).strength(0.0f));
+    public static final RedstoneBusBlock REDSTONE_BUS = new RedstoneBusBlock(FabricBlockSettings.of(Material.DECORATION).strength(0.0f).nonOpaque());
     
     @Override
     public void onInitialize() {

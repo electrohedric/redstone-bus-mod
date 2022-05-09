@@ -20,6 +20,9 @@
   "entrypoints": {
     "main": [
       "me.electrohedric.RedstoneBusMod"
+    ],
+    "client": [
+      "me.electrohedric.RedstoneBusModClient"
     ]
   },
   "mixins": [
