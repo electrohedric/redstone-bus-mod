@@ -1,3 +1,4 @@
 {
-  "block.redstone_bus.redstone_bus": "Redstone Bus"
+  "block.redstone_bus.redstone_bus": "Redstone Bus",
+  "item.redstone_bus.redstone_bus_wand": "Redstone Bus Wand"
 }
