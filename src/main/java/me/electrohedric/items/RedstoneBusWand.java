@@ -6,7 +6,7 @@ import net.fabricmc.api.*;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.*;
-import net.minecraft.block.BlockState;
+import net.minecraft.block.*;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.*;
 import net.minecraft.network.PacketByteBuf;
@@ -21,7 +21,8 @@ public class RedstoneBusWand extends Item {
 
     @Environment(EnvType.CLIENT)
     static BlockPos lastBusClickedPos = null; // client-side only. destroyed on client restart
-    static double RANGE = 100; // second click (must be able to see redstone bus block)
+    static double RANGE = 120; // second click (must be able to see redstone bus block)
+    static double MAX_LENGTH = 256; // any longer and signal will probably not be able to propogate all the way down
 
     public RedstoneBusWand(Settings settings) {
         super(settings);
@@ -46,7 +47,6 @@ public class RedstoneBusWand extends Item {
 
         // handle when a player needs a bunch of blocks set server-side
         ServerPlayNetworking.registerGlobalReceiver(BLOCK_SETTER_PACKET, (server, player, handler, buf, responseSender) -> {
-            // FIXME: totally not working
             BlockPos pos = buf.readBlockPos();
             BlockPos endPos = buf.readBlockPos();
 
@@ -55,7 +55,7 @@ public class RedstoneBusWand extends Item {
             int dx = endPos.getX() - pos.getX();
             int dz = endPos.getZ() - pos.getZ();
             if ((dx == 0) == (dz == 0)) return; // same block OR neither aligned: invalid
-            int dist = dx + dz;
+            int dist = Math.abs(dx + dz); // only one will be nonzero
             if (dist > RANGE) return; // distance too far
             World world = player.getWorld();
 
@@ -68,7 +68,7 @@ public class RedstoneBusWand extends Item {
                 if (dx != 0) { // along x
                     goDir = dx > 0 ? Direction.EAST : Direction.WEST;
                 } else { // along z
-                    goDir = dz > 0 ? Direction.SOUTH : Direction.EAST;
+                    goDir = dz > 0 ? Direction.SOUTH : Direction.NORTH;
                 }
 
                 Direction placeDir = goDir.getOpposite(); // again, the place direction is weird
@@ -84,6 +84,8 @@ public class RedstoneBusWand extends Item {
                     if (testState.isAir()) continue; // most probable. check first
                     // is it a redstone bus facing the same direction? that's also ok.
                     if (testState.isOf(RedstoneBusMod.REDSTONE_BUS) && testState.get(RedstoneBusBlock.FACING) == placeDir) continue;
+
+                    player.sendMessage(Text.of("Obstruction trying to place " + dist + " blocks at " + curPos.toShortString()), false);
                     return; // anything else we should abort
                 }
 
@@ -91,7 +93,10 @@ public class RedstoneBusWand extends Item {
                 curPos = pos;
                 for (int i = 0; i < dist; i++) {
                     curPos = curPos.offset(goDir);
-                    world.setBlockState(curPos, state, 0, 0);
+                    BlockState testState = world.getBlockState(curPos);
+                    if (testState.isAir()) {
+                        world.setBlockState(curPos, state, Block.NOTIFY_LISTENERS, 0);
+                    }
                 }
             });
         });
@@ -101,7 +106,6 @@ public class RedstoneBusWand extends Item {
         // for some reason, redstone gates (the superclass of RedstoneBusBlock) are totally directionally backwards
         //   (i.e. north is south, east is west, etc.)
         Direction dir = state.get(RedstoneBusBlock.FACING).getOpposite();
-        // FIXME: this doesn't work from the right side of the bus
 
         double Bx = pos.getX() + 0.5; // center of block pos
         double Bz = pos.getZ() + 0.5;
@@ -136,21 +140,21 @@ public class RedstoneBusWand extends Item {
         //   projection will easily catch that case and any other similar situations intuitively
         double playerVecMag = 0, blockVecMag = -1; // invalid by default
         if (Lx * Lx + Lz * Lz < 0.01) {
-            // looking straight up or down
+            // looking very straight up or down
             double Py = playerEntity.getEyeY();
             double By = pos.getY();
-            double Dy = Py - By;
-            double Ly = look3d.y;
-            if (Dy * Ly >= 0) { // same sign or same level
-                playerVecMag = Dx * Vx + Dz + Vz; // dot product of D and V. magnitude of V is 1
-                blockVecMag = 1; // valid
+            double Dy = Py - By; // player is higher = positive
+            double Ly = look3d.y; // player is looking up = positive
+            if (Dy * Ly <= 0) { // opposite sign or same level
+                playerVecMag = 1; // valid
+                blockVecMag = Dx * Vx + Dz * Vz; // proj D -> V = dot product of D and V when magnitude of V is 1
             }
         } else {
             // not looking straight up or down
             double denom = Vx * Lz - Vz * Lx;
             // checks denom != 0 but also edge cases where player look vector is too close to the block vector
             //   and thus would be very inprecise and not what the player expects
-            if (denom > 0.05) {
+            if (Math.abs(denom) > 0.05) {
                 // probably looking at the block vector line
                 blockVecMag = (Lz * Dx - Lx * Dz) / denom;
                 playerVecMag = (Vz * Dx - Vx * Dz) / denom;
@@ -160,12 +164,13 @@ public class RedstoneBusWand extends Item {
         // if block vector is non-positive (hence not going the right direction) do not place any blocks
         // if the block vector is too large (explained above) do the same
         // if look vector is negative, the player isn't actually looking in the right direction
-        if (blockVecMag <= 0.5 || blockVecMag > 2 * RANGE || playerVecMag < 0) {
+        // if look vector is too long, they probably aren't accurate anyway
+        if (blockVecMag <= 0.5 || blockVecMag > 1.5 * MAX_LENGTH || playerVecMag < 0 || playerVecMag > RANGE) {
             return null;
         }
 
         // extend the block pos out to magnitude calculated, up to max RANGE
-        int blockMag = (int) Math.min(Math.round(blockVecMag), RANGE);
+        int blockMag = (int) Math.min(Math.round(blockVecMag), MAX_LENGTH);
         return pos.offset(dir, blockMag);
     }
 
@@ -199,7 +204,7 @@ public class RedstoneBusWand extends Item {
         }
 
         Vec3i posVec = new Vec3i(pos.getX(), pos.getY(), pos.getZ());
-        playerEntity.sendMessage(Text.of("Bus is " + endPos.getManhattanDistance(posVec) + " blocks"), false);
+        playerEntity.sendMessage(Text.of("Bus is " + endPos.getManhattanDistance(posVec) + " blocks"), true);
 
         // send the start and end positions to the server for block setting
         PacketByteBuf buf = PacketByteBufs.create();
