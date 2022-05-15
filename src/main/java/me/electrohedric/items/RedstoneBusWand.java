@@ -30,8 +30,11 @@ public class RedstoneBusWand extends Item {
 
     public void init() {
         // handle when the player left clicks client-side
+
         AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
             if (!world.isClient) return ActionResult.PASS; // server passes
+            // the server knows nothing about the client whacking redstone bus blocks nor does it care until
+            // it receives the proper packet from the client
 
             // do special stuff if a block is whacked with this stick ...
             if (player.getStackInHand(hand).isOf(this)) {
@@ -40,6 +43,11 @@ public class RedstoneBusWand extends Item {
                     player.playSound(SoundEvents.BLOCK_ANVIL_LAND, 0.5f, 1.5f);
                     // ... namely setting the client-side variable, so we can access it later
                     lastBusClickedPos = pos;
+                } else if (lastBusClickedPos != null) {
+                    // TODO: if someone can figure out how to catch swing events and not just block swing events
+                    //   that is what i would replace this with
+                    lastBusClickedPos = null; // every swing (which hits a non-bus block) erases the position
+                    player.playSound(SoundEvents.BLOCK_AMETHYST_BLOCK_BREAK, 1.0f, 0.8f);
                 }
             }
             return ActionResult.PASS;
@@ -47,6 +55,8 @@ public class RedstoneBusWand extends Item {
 
         // handle when a player needs a bunch of blocks set server-side
         ServerPlayNetworking.registerGlobalReceiver(BLOCK_SETTER_PACKET, (server, player, handler, buf, responseSender) -> {
+            if (!player.isCreative()) return; // there's no permissions yet, so we just check if they are probably a mod
+
             BlockPos pos = buf.readBlockPos();
             BlockPos endPos = buf.readBlockPos();
 
