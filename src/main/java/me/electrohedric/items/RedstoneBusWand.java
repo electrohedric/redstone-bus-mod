@@ -1,12 +1,16 @@
 package me.electrohedric.items;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import me.electrohedric.RedstoneBusMod;
 import me.electrohedric.blocks.RedstoneBusBlock;
 import net.fabricmc.api.*;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.*;
 import net.minecraft.block.*;
+import net.minecraft.client.render.debug.DebugRenderer;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.*;
 import net.minecraft.network.PacketByteBuf;
@@ -21,6 +25,11 @@ public class RedstoneBusWand extends Item {
 
     @Environment(EnvType.CLIENT)
     static BlockPos lastBusClickedPos = null; // client-side only. destroyed on client restart
+    @Environment(EnvType.CLIENT)
+    static BlockPos currentBusLineLookPos = null;
+    @Environment(EnvType.CLIENT)
+    static boolean isHoldingWand = false;
+
     static double RANGE = 120; // second click (must be able to see redstone bus block)
     static double MAX_LENGTH = 256; // any longer and signal will probably not be able to propogate all the way down
 
@@ -30,7 +39,6 @@ public class RedstoneBusWand extends Item {
 
     public void init() {
         // handle when the player left clicks client-side
-
         AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
             if (!world.isClient) return ActionResult.PASS; // server passes
             // the server knows nothing about the client whacking redstone bus blocks nor does it care until
@@ -47,10 +55,35 @@ public class RedstoneBusWand extends Item {
                     // TODO: if someone can figure out how to catch swing events and not just block swing events
                     //   that is what i would replace this with
                     lastBusClickedPos = null; // every swing (which hits a non-bus block) erases the position
-                    player.playSound(SoundEvents.BLOCK_AMETHYST_BLOCK_BREAK, 1.0f, 0.8f);
+                    currentBusLineLookPos = null;
+                    player.playSound(SoundEvents.BLOCK_AMETHYST_CLUSTER_BREAK, 1f, 0.6f);
                 }
             }
             return ActionResult.PASS;
+        });
+
+        // do ghost rendering
+        WorldRenderEvents.LAST.register(context -> {
+            if (lastBusClickedPos == null || !isHoldingWand) return;
+
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+
+            Vec3d cam = context.camera().getPos().negate();
+            Box bb;
+            if (currentBusLineLookPos == null) {
+                bb = new Box(lastBusClickedPos);
+            } else {
+                // create a bounding box around both positions
+                BlockPos p1 = lastBusClickedPos;
+                BlockPos p2 = currentBusLineLookPos;
+
+                bb = new Box(Math.min(p1.getX(), p2.getX()), p1.getY(), Math.min(p1.getZ(), p2.getZ()),
+                        Math.max(p1.getX(), p2.getX()) + 1, p1.getY() + 1, Math.max(p1.getZ(), p2.getZ()) + 1);
+            }
+            // make smaller like slab and move to camera position so it can place correctly (idk, look at DebugRenderer)
+            bb = bb.withMaxY(bb.maxY - 0.8);
+            DebugRenderer.drawBox(bb.offset(cam),1.0f, 0.05f, 0.15f, 0.2f);
         });
 
         // handle when a player needs a bunch of blocks set server-side
@@ -66,7 +99,7 @@ public class RedstoneBusWand extends Item {
             int dz = endPos.getZ() - pos.getZ();
             if ((dx == 0) == (dz == 0)) return; // same block OR neither aligned: invalid
             int dist = Math.abs(dx + dz); // only one will be nonzero
-            if (dist > RANGE) return; // distance too far
+            if (dist > MAX_LENGTH) return; // too many blocks to place
             World world = player.getWorld();
 
             // blocks are aligned in either the x or z, but not both
@@ -80,9 +113,7 @@ public class RedstoneBusWand extends Item {
                 } else { // along z
                     goDir = dz > 0 ? Direction.SOUTH : Direction.NORTH;
                 }
-
-                Direction placeDir = goDir.getOpposite(); // again, the place direction is weird
-                if (state.get(RedstoneBusBlock.FACING) != placeDir) return; // state invalidated :(
+                Direction reverseDir = goDir.getOpposite();
 
                 // ok, nothing's changed since the client sent the packet. we are ok to start setting blocks
                 // but first, check that we won't overwrite anything except redstone buses and air
@@ -90,21 +121,54 @@ public class RedstoneBusWand extends Item {
                 for (int i = 0; i < dist; i++) {
                     curPos = curPos.offset(goDir);
                     BlockState testState = world.getBlockState(curPos);
-                    // test that we won't overwrite anything important
-                    if (testState.isAir()) continue; // most probable. check first
-                    // is it a redstone bus facing the same direction? that's also ok.
-                    if (testState.isOf(RedstoneBusMod.REDSTONE_BUS) && testState.get(RedstoneBusBlock.FACING) == placeDir) continue;
+                    BlockPos underPos = curPos.down();
+                    BlockState underState = world.getBlockState(underPos);
 
-                    player.sendMessage(Text.of("Obstruction trying to place " + dist + " blocks at " + curPos.toShortString()), false);
-                    return; // anything else we should abort
+                    /* test that we won't overwrite anything important */
+
+                    // test 1a: overwriting air
+                    if (testState.isAir()) {
+                        // test 1b: block underneath can support redstone-like blocks OR we can place one
+                        if (underState.isAir()) continue;
+                        if (underState.isSideSolid(world, underPos, Direction.UP, SideShapeType.RIGID)) continue;
+                        player.sendMessage(Text.of("Bad support block at " + underPos.toShortString()), false);
+                        return; // fail
+                    }
+
+                    // test 2: redstone bus aligned in same axis? that's also ok.
+                    if (testState.isOf(RedstoneBusMod.REDSTONE_BUS)) {
+                        Direction overwriteFacing = testState.get(RedstoneBusBlock.FACING);
+                        if (overwriteFacing == goDir || overwriteFacing == reverseDir) continue;
+                        // fall through: obstruction
+                    }
+
+                    player.sendMessage(Text.of("Obstruction at " + curPos.toShortString()), false);
+                    return; // fail
                 }
 
+                // cache stuff we need for validating
+                Direction properFacing = state.get(RedstoneBusBlock.FACING);
+                BlockState supportBlock = world.getBlockState(pos.down());
+
+                // TODO: check that we aren't cutting off a redstone staircase or something
                 // set all the blocks :)
+
                 curPos = pos;
                 for (int i = 0; i < dist; i++) {
                     curPos = curPos.offset(goDir);
+
+                    // give the block support (of the original pos support type) if it needs it
+                    BlockPos underPos = curPos.down();
+                    BlockState underState = world.getBlockState(underPos);
+                    if (underState.isAir()) {
+                        world.setBlockState(underPos, supportBlock, Block.NOTIFY_LISTENERS, 0);
+                    }
+
+                    // not afraid of overwriting something important (we already checked that)
+                    // just need to check this condition to only set blocks which aren't correct
                     BlockState testState = world.getBlockState(curPos);
-                    if (testState.isAir()) {
+                    if (testState.isAir() || (testState.isOf(RedstoneBusMod.REDSTONE_BUS) &&
+                            testState.get(RedstoneBusBlock.FACING) != properFacing)) {
                         world.setBlockState(curPos, state, Block.NOTIFY_LISTENERS, 0);
                     }
                 }
@@ -118,22 +182,28 @@ public class RedstoneBusWand extends Item {
         Direction dir = state.get(RedstoneBusBlock.FACING).getOpposite();
 
         double Bx = pos.getX() + 0.5; // center of block pos
+        double By = pos.getY();
         double Bz = pos.getZ() + 0.5;
         double Vx = dir.getOffsetX(); // block vec (direction)
+        double Vy = 0;
         double Vz = dir.getOffsetZ();
         double Px = playerEntity.getX(); // player pos
+        double Py = playerEntity.getEyeY();
         double Pz = playerEntity.getZ();
         Vec3d look3d = playerEntity.getRotationVector();
         double Lx = look3d.x; // look vec (direction)
+        double Ly = look3d.y;
         double Lz = look3d.z;
         double Dx = Px - Bx; // delta
+        double Dy = Py - By;
         double Dz = Pz - Bz;
 
-        // using linear algebra... solving the system of equations:
-        // sVx - tPx = Dx
-        // sVz - tPz = Dz
+        // solve the system of equations:
+        // sVx - tLx = Dx
+        // sVz - tLz = Dz
         // where s is the scalar for the block direction unit vector (blockVecMag)
         //   and t is the scalar for the player direction unit vector (playerVecMag)
+        // this represents the situation where the player is looking horizontally at the bus axis
         //
         //              LzDx - LxDz             VzDx - VxDz
         // we get  s = -------------  and  t = -------------
@@ -141,47 +211,88 @@ public class RedstoneBusWand extends Item {
         //
         // so we conclude that there is no solution if VxLz = VzLx:
         //   (aka the cross product of the look vector and block vector is 0) ((aka looking parallel to block))
-        //   if this is the case, we assume no intersection
-        //   if the denominator is tiny, this may create a very large block vector
-        //   so we will also ignore block vectors which are more than 100% than its max length
-        // there is another edge case where the player is looking straight up or down:
-        //   if this is the case, just project the block -> player vector (D) onto the block vector
-        //   it is likely that the player is looking straight down onto where they want the bus to end
-        //   projection will easily catch that case and any other similar situations intuitively
+        //
+        // also solve the equation:
+        //   tLy = -Dy
+        // where t is the same as above, but Dy is negated because when Ly is postive, the player
+        //   is looking up and the left side of the equation will be positive, but Dy would be negative
+        // this represents the situation where the player is looking vertically at the bus plane
+        //
+        // we get  t = -Dy / Ly
+        //   then get the position on the plane by projecting the look vector out that far
+        //   from there we can project that position vector onto the bus axis
+        //
+        // we conclude that there is no solution if Ly == 0
+        //   (aka the player is looking horizontally)
+
+        // first we have to calculate which calculation would provide better accuracy
+//        double projBlockMag = Dx * Vx + Dz * Vz; // proj D -> V = dot product of D and V when magnitude of V is 1
+//        double projBX = Bx + dir.getOffsetX() * projBlockMag;
+//        double projBZ = Bz + dir.getOffsetZ() * projBlockMag;
+//        double hDist = Math.abs(Px - projBX + Pz - projBZ); // manhatten, but one delta is going to be 0
+//        double vDist = Math.abs(Dy);
+
+        // try both (assuming they are valid) and pick the shorter one
+        // min(a, b) is guaranteed to be a smooth transition
+        // it also forces the player to be more accurate when describing the position
         double playerVecMag = 0, blockVecMag = -1; // invalid by default
-        if (Lx * Lx + Lz * Lz < 0.01) {
-            // looking very straight up or down
-            double Py = playerEntity.getEyeY();
-            double By = pos.getY();
-            double Dy = Py - By; // player is higher = positive
-            double Ly = look3d.y; // player is looking up = positive
-            if (Dy * Ly <= 0) { // opposite sign or same level
-                playerVecMag = 1; // valid
-                blockVecMag = Dx * Vx + Dz * Vz; // proj D -> V = dot product of D and V when magnitude of V is 1
-            }
-        } else {
-            // not looking straight up or down
-            double denom = Vx * Lz - Vz * Lx;
-            // checks denom != 0 but also edge cases where player look vector is too close to the block vector
-            //   and thus would be very inprecise and not what the player expects
-            if (Math.abs(denom) > 0.05) {
-                // probably looking at the block vector line
-                blockVecMag = (Lz * Dx - Lx * Dz) / denom;
-                playerVecMag = (Vz * Dx - Vx * Dz) / denom;
-            }
+        // assuming vertical placement is about 1.5x as good as horizontal, although horizontal is still crucial
+        if (Math.abs(Ly) > 0.01) {
+            playerVecMag = -Dy / Ly;
+            double planeX = Px + Lx * playerVecMag;
+            double planeZ = Pz + Lz * playerVecMag;
+            double planeOffX = planeX - Bx;
+            double planeOffZ = planeZ - Bz;
+            blockVecMag = (planeOffX * Vx + planeOffZ * Vz); // proj plane delta -> V
+        }
+        double denom = Vx * Lz - Vz * Lx;
+        // checks denom != 0 but also edge cases where player look vector is too close to the block vector
+        //   and thus would be very inprecise and not what the player expects
+        double tempBlockMag = (Lz * Dx - Lx * Dz) / denom;
+        if (Math.abs(denom) > 0.02 && tempBlockMag < blockVecMag) {
+            // probably looking at the block vector line
+            blockVecMag = tempBlockMag;
+            playerVecMag = (Vz * Dx - Vx * Dz) / denom;
         }
 
         // if block vector is non-positive (hence not going the right direction) do not place any blocks
-        // if the block vector is too large (explained above) do the same
-        // if look vector is negative, the player isn't actually looking in the right direction
-        // if look vector is too long, they probably aren't accurate anyway
-        if (blockVecMag <= 0.5 || blockVecMag > 1.5 * MAX_LENGTH || playerVecMag < 0 || playerVecMag > RANGE) {
+        // if the look vector is negative, the player isn't actually looking in the right direction
+        // if the look vector is too long, they probably aren't accurate anyway
+        if (Math.abs(blockVecMag) <= 0.5 || playerVecMag < 0 || playerVecMag > RANGE) {
             return null;
         }
 
         // extend the block pos out to magnitude calculated, up to max RANGE
-        int blockMag = (int) Math.min(Math.round(blockVecMag), MAX_LENGTH);
+        int blockMag = (int) Math.min(Math.max(Math.round(blockVecMag), -MAX_LENGTH), MAX_LENGTH);
         return pos.offset(dir, blockMag);
+    }
+
+    @Override
+    public void inventoryTick(ItemStack stack, World world, Entity entity, int slot, boolean selected) {
+        if (!world.isClient) return;
+        /* 20 times a second, whenever the item is in the inventory, for every item */
+
+        if (!selected) {
+            isHoldingWand = false;
+            return;
+        }
+        isHoldingWand = true;
+
+        if (lastBusClickedPos == null) return;
+
+        // run a simulation and update the rendering vars
+        if (entity instanceof PlayerEntity p) {
+            BlockState state = world.getBlockState(lastBusClickedPos);
+            if (state.isOf(RedstoneBusMod.REDSTONE_BUS)) {
+                currentBusLineLookPos = calcWandEndPos(p, lastBusClickedPos, state);
+                if (currentBusLineLookPos != null) {
+                    Vec3i pos1 = new Vec3i(lastBusClickedPos.getX(), lastBusClickedPos.getY(), lastBusClickedPos.getZ());
+                    int dist = currentBusLineLookPos.getManhattanDistance(pos1);
+                    p.sendMessage(Text.of("Bus length: " + dist), true);
+                }
+            }
+
+        }
     }
 
     @Override
@@ -192,6 +303,7 @@ public class RedstoneBusWand extends Item {
         // the server doesn't even know what the original position clicked is
         ItemStack item = playerEntity.getStackInHand(hand);
         if (!world.isClient) return TypedActionResult.pass(item);
+        if (!playerEntity.isCreative()) return TypedActionResult.pass(item);
 
         // did they click on a bus before doing this?
         BlockPos pos = lastBusClickedPos;
@@ -212,9 +324,6 @@ public class RedstoneBusWand extends Item {
             // player either not looking at the block vector line or too far or too close
             return TypedActionResult.fail(item);
         }
-
-        Vec3i posVec = new Vec3i(pos.getX(), pos.getY(), pos.getZ());
-        playerEntity.sendMessage(Text.of("Bus is " + endPos.getManhattanDistance(posVec) + " blocks"), true);
 
         // send the start and end positions to the server for block setting
         PacketByteBuf buf = PacketByteBufs.create();
