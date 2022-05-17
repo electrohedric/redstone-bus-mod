@@ -235,7 +235,7 @@ public class RedstoneBusWand extends Item {
         // try both (assuming they are valid) and pick the shorter one
         // min(a, b) is guaranteed to be a smooth transition
         // it also forces the player to be more accurate when describing the position
-        double playerVecMag = 0, blockVecMag = -1; // invalid by default
+        double playerVecMag = 0, blockVecMag = MAX_LENGTH; // invalid by default
         // assuming vertical placement is about 1.5x as good as horizontal, although horizontal is still crucial
         if (Math.abs(Ly) > 0.01) {
             playerVecMag = -Dy / Ly;
@@ -249,7 +249,7 @@ public class RedstoneBusWand extends Item {
         // checks denom != 0 but also edge cases where player look vector is too close to the block vector
         //   and thus would be very inprecise and not what the player expects
         double tempBlockMag = (Lz * Dx - Lx * Dz) / denom;
-        if (Math.abs(denom) > 0.02 && tempBlockMag < blockVecMag) {
+        if (Math.abs(denom) > 0.02 && Math.abs(tempBlockMag) < Math.abs(blockVecMag)) {
             // probably looking at the block vector line
             blockVecMag = tempBlockMag;
             playerVecMag = (Vz * Dx - Vx * Dz) / denom;
@@ -258,7 +258,7 @@ public class RedstoneBusWand extends Item {
         // if block vector is non-positive (hence not going the right direction) do not place any blocks
         // if the look vector is negative, the player isn't actually looking in the right direction
         // if the look vector is too long, they probably aren't accurate anyway
-        if (Math.abs(blockVecMag) <= 0.5 || playerVecMag < 0 || playerVecMag > RANGE) {
+        if (Math.abs(blockVecMag) <= 0.5 || playerVecMag <= 0 || playerVecMag > RANGE) {
             return null;
         }
 

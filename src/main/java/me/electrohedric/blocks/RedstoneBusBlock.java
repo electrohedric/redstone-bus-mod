@@ -27,7 +27,13 @@ public class RedstoneBusBlock extends AbstractRedstoneGateBlock {
     protected void updatePowered(World world, BlockPos pos, BlockState state) {
         boolean powered = state.get(POWERED);
         if (powered != this.hasPower(world, pos, state)) {
-            world.setBlockState(pos, state.with(POWERED, !powered));
+            // calls neighbor updates on surrounding wires which eventually calls updatePowered()
+            // FIXME: this can result in stackoverflow (which is probably a bad sign and calls for a better design)
+            //        I'd like to have this just go down the wire and set all the block states myself
+            // sorry, I literally don't know what the max update depth does.
+            // I thought I did, but setting it to 0 does like the same thing...
+            // but the default (512) definitely breaks at 1000+ blocks
+            world.setBlockState(pos, state.with(POWERED, !powered), Block.NOTIFY_ALL, 256);
         }
     }
 
