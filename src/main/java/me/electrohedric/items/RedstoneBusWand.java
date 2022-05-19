@@ -86,7 +86,6 @@ public class RedstoneBusWand extends Item {
     public void serverInit() {
         // handle when a player needs a bunch of blocks set server-side
         ServerPlayNetworking.registerGlobalReceiver(BLOCK_SETTER_PACKET, (server, player, handler, buf, responseSender) -> {
-            RedstoneBusMod.LOGGER.info("Got block setter packet");
             if (!player.isCreative()) return; // there's no permissions yet, so we just check if they are probably a mod
 
             BlockPos pos = buf.readBlockPos();
@@ -329,7 +328,6 @@ public class RedstoneBusWand extends Item {
         buf.writeBlockPos(pos);
         buf.writeBlockPos(endPos);
         ClientPlayNetworking.send(BLOCK_SETTER_PACKET, buf);
-        RedstoneBusMod.LOGGER.info("Sending block setter packet...");
 
         return TypedActionResult.success(item);
     }
