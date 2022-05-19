@@ -12,6 +12,7 @@ import java.util.Random;
 
 public class RedstoneBusBlock extends AbstractRedstoneGateBlock {
     private static final VoxelShape SHAPE = Block.createCuboidShape(0.0, 0.0, 0.0, 16.0, 0.25, 16.0);
+    public static int MAX_BUS_CHAIN = 512; // any longer and the chunks literally won't load
 
     @Override
     public VoxelShape getOutlineShape(BlockState state, BlockView world, BlockPos pos, ShapeContext context) {
@@ -27,14 +28,31 @@ public class RedstoneBusBlock extends AbstractRedstoneGateBlock {
     protected void updatePowered(World world, BlockPos pos, BlockState state) {
         boolean powered = state.get(POWERED);
         if (powered != this.hasPower(world, pos, state)) {
-            // calls neighbor updates on surrounding wires which eventually calls updatePowered()
-            // FIXME: this can result in stackoverflow (which is probably a bad sign and calls for a better design)
-            //        I'd like to have this just go down the wire and set all the block states myself
-            // sorry, I literally don't know what the max update depth does.
-            // I thought I did, but setting it to 0 does like the same thing...
-            // but the default (512) definitely breaks at 1000+ blocks
-            world.setBlockState(pos, state.with(POWERED, !powered), Block.NOTIFY_ALL, 256);
+            // do a chain of updates until we hit something we don't know what to do with,
+            // then let minecraft figure it out
+            Direction myDirection = state.get(FACING);
+            Direction pointing = myDirection.getOpposite();
+            BlockPos curPos = pos;
+            int i = MAX_BUS_CHAIN;
+            while (i-- > 0) {
+                BlockPos lastPos = curPos;
+                curPos = curPos.offset(pointing);
+                BlockState nextBlock = world.getBlockState(curPos);
+                // can we skip a neighbor update?
+                if (nextBlock.isOf(this) && nextBlock.get(FACING) == myDirection) {
+                    world.setBlockState(lastPos, state.with(POWERED, !powered), Block.NOTIFY_LISTENERS);
+                } else {
+                    world.setBlockState(lastPos, state.with(POWERED, !powered), Block.NOTIFY_ALL);
+                    break;
+                }
+            }
         }
+    }
+
+    protected void updateTarget(World world, BlockPos pos, BlockState state) {
+        Direction direction = state.get(FACING);
+        BlockPos blockPos = pos.offset(direction.getOpposite());
+        world.updateNeighborsExcept(blockPos, this, direction);
     }
 
     @Override

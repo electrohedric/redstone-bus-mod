@@ -37,13 +37,9 @@ public class RedstoneBusWand extends Item {
         super(settings);
     }
 
-    public void init() {
+    public void clientInit() {
         // handle when the player left clicks client-side
         AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
-            if (!world.isClient) return ActionResult.PASS; // server passes
-            // the server knows nothing about the client whacking redstone bus blocks nor does it care until
-            // it receives the proper packet from the client
-
             // do special stuff if a block is whacked with this stick ...
             if (player.getStackInHand(hand).isOf(this)) {
                 BlockState hitBlock = world.getBlockState(pos);
@@ -85,9 +81,12 @@ public class RedstoneBusWand extends Item {
             bb = bb.withMaxY(bb.maxY - 0.8);
             DebugRenderer.drawBox(bb.offset(cam),1.0f, 0.05f, 0.15f, 0.2f);
         });
+    }
 
+    public void serverInit() {
         // handle when a player needs a bunch of blocks set server-side
         ServerPlayNetworking.registerGlobalReceiver(BLOCK_SETTER_PACKET, (server, player, handler, buf, responseSender) -> {
+            RedstoneBusMod.LOGGER.info("Got block setter packet");
             if (!player.isCreative()) return; // there's no permissions yet, so we just check if they are probably a mod
 
             BlockPos pos = buf.readBlockPos();
@@ -185,7 +184,7 @@ public class RedstoneBusWand extends Item {
         double By = pos.getY();
         double Bz = pos.getZ() + 0.5;
         double Vx = dir.getOffsetX(); // block vec (direction)
-        double Vy = 0;
+//        double Vy = 0;
         double Vz = dir.getOffsetZ();
         double Px = playerEntity.getX(); // player pos
         double Py = playerEntity.getEyeY();
@@ -330,6 +329,7 @@ public class RedstoneBusWand extends Item {
         buf.writeBlockPos(pos);
         buf.writeBlockPos(endPos);
         ClientPlayNetworking.send(BLOCK_SETTER_PACKET, buf);
+        RedstoneBusMod.LOGGER.info("Sending block setter packet...");
 
         return TypedActionResult.success(item);
     }

@@ -26,8 +26,5 @@ public class RedstoneBusMod implements ModInitializer {
         Registry.register(Registry.BLOCK, new Identifier(MODID, "redstone_bus"), REDSTONE_BUS);
         Registry.register(Registry.ITEM, new Identifier(MODID, "redstone_bus"), REDSTONE_BUS_BLOCKITEM);
         Registry.register(Registry.ITEM, new Identifier(MODID, "redstone_bus_wand"), REDSTONE_BUS_WAND);
-        REDSTONE_BUS_WAND.init();
     }
-
-
 }
