@@ -23,8 +23,14 @@ public class RedstoneBusMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        // for all intents and purposes, this is the server.
+        // the client has all the server stuff on it anyway for integrated server environment stuff
+        RedstoneBusMod.LOGGER.info("Server initializing...");
         Registry.register(Registry.BLOCK, new Identifier(MODID, "redstone_bus"), REDSTONE_BUS);
         Registry.register(Registry.ITEM, new Identifier(MODID, "redstone_bus"), REDSTONE_BUS_BLOCKITEM);
         Registry.register(Registry.ITEM, new Identifier(MODID, "redstone_bus_wand"), REDSTONE_BUS_WAND);
+
+        REDSTONE_BUS_WAND.serverInit();
+        RedstoneBusMod.LOGGER.info("Server initialized");
     }
 }

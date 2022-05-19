@@ -23,9 +23,6 @@
     ],
     "client": [
       "me.electrohedric.RedstoneBusModClient"
-    ],
-    "server": [
-      "me.electrohedric.RedstoneBusModServer"
     ]
   },
 
