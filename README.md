@@ -8,3 +8,7 @@ It should also be more efficient than redstone itself because its signal is dire
 
 Mod comes with a wand which you left click on a redstone bus to set an anchor, then right click looking down the imaginary line where you want the redstone bus to be.
 If there is no block beneath where the redstone wire will be placed, it copies the block beneath the anchor.
+
+<b>For Minecraft 1.18 and 1.19</b><br>
+Download Fabric and Fabric API: https://fabricmc.net/use/installer/<br>
+Download JAR: https://www.curseforge.com/minecraft/mc-mods/instant-redstone-bus-mod
