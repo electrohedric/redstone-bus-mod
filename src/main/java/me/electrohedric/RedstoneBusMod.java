@@ -18,7 +18,7 @@
 package me.electrohedric;
 
 import me.electrohedric.blocks.RedstoneBusBlock;
-import me.electrohedric.items.RedstoneBusWand;
+import me.electrohedric.items.RedstoneBusWandItem;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.item.v1.FabricItemSettings;
 import net.fabricmc.fabric.api.object.builder.v1.block.FabricBlockSettings;
@@ -36,7 +36,7 @@ public class RedstoneBusMod implements ModInitializer {
     
     public static final RedstoneBusBlock REDSTONE_BUS = new RedstoneBusBlock(FabricBlockSettings.of(Material.DECORATION).strength(0.0f).nonOpaque());
     public static final BlockItem REDSTONE_BUS_BLOCKITEM = new BlockItem(REDSTONE_BUS, new FabricItemSettings().group(ItemGroup.REDSTONE));
-    public static final RedstoneBusWand REDSTONE_BUS_WAND = new RedstoneBusWand(new FabricItemSettings().group(ItemGroup.REDSTONE).maxCount(1));
+    public static final RedstoneBusWandItem REDSTONE_BUS_WAND = new RedstoneBusWandItem(new FabricItemSettings().group(ItemGroup.REDSTONE).maxCount(1));
 
     @Override
     public void onInitialize() {

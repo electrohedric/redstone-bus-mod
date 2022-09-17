@@ -37,7 +37,7 @@ import net.minecraft.util.*;
 import net.minecraft.util.math.*;
 import net.minecraft.world.World;
 
-public class RedstoneBusWand extends Item {
+public class RedstoneBusWandItem extends Item {
     public static final Identifier BLOCK_SETTER_PACKET = new Identifier(RedstoneBusMod.MODID + "_block_setter");
 
     @Environment(EnvType.CLIENT)
@@ -53,7 +53,7 @@ public class RedstoneBusWand extends Item {
     // server setting: any longer and signal will probably not be able to propogate all the way down because of physics distance
     static double MAX_LENGTH = 320;
 
-    public RedstoneBusWand(Settings settings) {
+    public RedstoneBusWandItem(Settings settings) {
         super(settings);
     }
 
