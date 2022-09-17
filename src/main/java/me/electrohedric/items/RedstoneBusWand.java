@@ -31,7 +31,7 @@ public class RedstoneBusWand extends Item {
     static boolean isHoldingWand = false;
 
     // client setting: second click (must be able to see redstone bus block)
-    static double RANGE = 160;
+    static double RANGE = 200;
 
     // server setting: any longer and signal will probably not be able to propogate all the way down because of physics distance
     static double MAX_LENGTH = 320;
